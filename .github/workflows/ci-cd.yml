@@ -36,6 +36,7 @@ jobs:
           repository: Rafi1945/argocd-local-demo
           token: ${{ secrets.GITOPS_TOKEN }}
           path: argocd-local-demo
+          persist-credentials: true
 
       - name: Update image tag in GitOps deployment
         run: |
