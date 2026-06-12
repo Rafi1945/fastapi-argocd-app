@@ -1,4 +1,4 @@
-name: Build and Push FastAPI Image
+name: Build Push and Update GitOps
 
 on:
   push:
@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-push:
+  build-push-update-gitops:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
+      - name: Checkout application source code
         uses: actions/checkout@v4
 
       - name: Login to Docker Hub using access token
@@ -20,18 +20,33 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Build Docker image with commit tag
+      - name: Build Docker image
         run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/fastapi-argocd-app:${{ github.sha }} .
-
-      - name: Build Docker image with latest tag
-        run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/fastapi-argocd-app:latest .
 
-      - name: Push commit-tagged image
+      - name: Push Docker image
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-argocd-app:${{ github.sha }}
-
-      - name: Push latest image
-        run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-argocd-app:latest
+
+      - name: Checkout GitOps repository
+        uses: actions/checkout@v4
+        with:
+          repository: Rafi1945/argocd-local-demo
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: argocd-local-demo
+
+      - name: Update image tag in GitOps deployment
+        run: |
+          cd argocd-local-demo
+          sed -i "s|image: .*fastapi-argocd-app:.*|image: ${{ secrets.DOCKER_USERNAME }}/fastapi-argocd-app:${{ github.sha }}|" guestbook/deployment.yaml
+
+      - name: Commit and push GitOps change
+        run: |
+          cd argocd-local-demo
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add guestbook/deployment.yaml
+          git commit -m "Update FastAPI image to ${{ github.sha }}" || echo "No changes to commit"
+          git push
