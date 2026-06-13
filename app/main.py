@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import pickle
+import mlflow
+import mlflow.pyfunc
+import pandas as pd
 import os
 
 
-app = FastAPI(title="Iris ML Prediction API")
+app = FastAPI(title="Iris ML Prediction API with MLflow Registry")
 
 
 class IrisInput(BaseModel):
@@ -14,10 +16,11 @@ class IrisInput(BaseModel):
     petal_width: float
 
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "iris_model.pkl")
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://host.docker.internal:5000")
+MODEL_URI = os.getenv("MODEL_URI", "models:/IrisClassifier/1")
 
-with open(MODEL_PATH, "rb") as file:
-    model = pickle.load(file)
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+model = mlflow.pyfunc.load_model(MODEL_URI)
 
 
 class_names = {
@@ -30,8 +33,10 @@ class_names = {
 @app.get("/")
 def home():
     return {
-        "message": "Iris ML Prediction API deployed using Argo CD",
-        "status": "running"
+        "message": "Iris ML Prediction API using MLflow Registry",
+        "status": "running",
+        "model_uri": MODEL_URI,
+        "mlflow_tracking_uri": MLFLOW_TRACKING_URI
     }
 
 
@@ -44,14 +49,22 @@ def health():
 
 @app.post("/predict")
 def predict(data: IrisInput):
-    input_data = [[
-        data.sepal_length,
-        data.sepal_width,
-        data.petal_length,
-        data.petal_width
-    ]]
+    input_df = pd.DataFrame(
+        [[
+            data.sepal_length,
+            data.sepal_width,
+            data.petal_length,
+            data.petal_width
+        ]],
+        columns=[
+            "sepal_length",
+            "sepal_width",
+            "petal_length",
+            "petal_width"
+        ]
+    )
 
-    prediction = model.predict(input_data)[0]
+    prediction = model.predict(input_df)[0]
 
     return {
         "prediction": int(prediction),
